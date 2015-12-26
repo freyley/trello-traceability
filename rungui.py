@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 
 import urwid
+from trello import TrelloClient
+
+import settings
+
 
 class RemoveOrgUser(object):
     def __init__(self, parent):
@@ -20,23 +24,81 @@ class RemoveOrgUser(object):
         if k in ('u', 'U'):
             self.parent.set_view(Top)
 
+class NoRefocusColumns(urwid.Columns):
+    def keypress(self, size, key):
+        return key
+
 class Connect(object):
     def __init__(self, parent):
-        self.items = [urwid.Text("foo"), urwid.Text("bar")]
-
-        self.main_content = urwid.SimpleListWalker(
-            [urwid.AttrMap(w, None, 'reveal focus') for w in self.items])
-
         self.parent = parent
-        self.listbox = urwid.ListBox(self.main_content)
+        self.get_trello_lists()
+        self.set_left_content()
+        self.set_right_content()
+        self.left_content = urwid.SimpleListWalker(
+            [urwid.AttrMap(w, None, 'reveal focus') for w in self.left_items])
+        self.right_content = urwid.SimpleListWalker(
+            [urwid.AttrMap(w, None, 'reveal focus') for w in self.right_items])
+        self.left_listbox = urwid.ListBox(self.left_content)
+        self.right_listbox = urwid.ListBox(self.right_content)
+
+        self.columns = NoRefocusColumns([self.left_listbox, self.right_listbox], focus_column=0)
+
+    def set_left_content(self, reset=False):
+        self.left_items = [urwid.Text(self.story_list.name), urwid.Text('-=-=-=-=-=-=-=-=-=-')]
+        self.left_items += [urwid.Text(story.name) for story in self.get_stories()]
+        if reset:
+            while self.left_content:
+                self.left_content.pop()
+            self.left_content += self.left_items
+    def set_right_content(self, reset=False):
+        self.right_items = [urwid.Text(self.epic_list.name), urwid.Text('-=-=-=-=-=-=-=-=-=-')]
+        self.right_items += [urwid.Text(epic.name) for epic in self.get_epics()]
+        if reset:
+            while self.right_content:
+                self.right_content.pop()
+            self.right_content += self.right_items
 
     @property
     def widget(self):
-        return urwid.AttrWrap(self.listbox, 'body')
+        return urwid.AttrWrap(self.columns, 'body')
+
+    @property
+    def trello(self):
+        return self.parent.trelloclient
+
+    def get_trello_lists(self):
+        self.story_board = self.trello.get_board(settings.CURRENT_TASK_BOARD)
+        self.story_lists = self.story_board.get_lists('open')
+        self.epic_board = self.trello.get_board(settings.CURRENT_EPIC_BOARD)
+        self.epic_lists = self.epic_board.get_lists('open')
+        self.epic_list_ptr = self.story_list_ptr = 0
+
+    @property
+    def story_list(self):
+        return self.story_lists[self.story_list_ptr]
+    @property
+    def epic_list(self):
+        return self.epic_lists[self.epic_list_ptr]
+
+    def get_stories(self):
+        self.stories = self.story_list.list_cards()
+        return self.stories
+
+    def get_epics(self):
+        self.epics = self.epic_list.list_cards()
+        return self.epics
 
     def handle_input(self, k):
         if k in ('u', 'U'):
             self.parent.set_view(Top)
+        if k == 'j':
+            if self.epic_list_ptr > 0:
+                self.epic_list_ptr -= 1
+                self.set_right_content(reset=True)
+        if k == 'l':
+            if self.epic_list_ptr < len(self.epic_lists)-1:
+                self.epic_list_ptr += 1
+                self.set_right_content(reset=True)
 
 
 VIEWS = {
@@ -116,6 +178,13 @@ class TrelloTraceability:
             self.current_view.widget,
             header=urwid.AttrWrap(self.header, 'head' ),
             footer=self.cmds )
+
+        self.trelloclient = TrelloClient(
+            api_key=settings.TRELLO_API_KEY,
+            api_secret=settings.TRELLO_API_SECRET,
+            token=settings.TRELLO_OAUTH_TOKEN,
+        )
+        self.organization = self.trelloclient.get_organization(settings.TRELLO_ORGANIZATION_ID)
 
     def set_view(self, cls):
         self.current_view = cls(self)
