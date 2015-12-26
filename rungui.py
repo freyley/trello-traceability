@@ -100,8 +100,9 @@ class TrelloTraceability:
         ]
 
     cmdstrings = [
-        ('title', "Example Data Browser"), "    ",
-        ('key', "Q"),
+        ('title', "Commands"), "    ",
+        ('key', "Q"), ' ',
+        ('key', 'U')
         ]
 
     def __init__(self):
@@ -126,7 +127,6 @@ class TrelloTraceability:
         self.loop = urwid.MainLoop(self.view, self.palette,
             unhandled_input=self.unhandled_input)
         self.loop.run()
-
 
     def unhandled_input(self, k):
         if k in ('q','Q'):
