@@ -91,15 +91,22 @@ class Connect(object):
     def handle_input(self, k):
         if k in ('u', 'U'):
             self.parent.set_view(Top)
-        if k == 'j':
+        elif k == 'j':
             if self.epic_list_ptr > 0:
                 self.epic_list_ptr -= 1
                 self.set_right_content(reset=True)
-        if k == 'l':
+        elif k == 'l':
             if self.epic_list_ptr < len(self.epic_lists)-1:
                 self.epic_list_ptr += 1
                 self.set_right_content(reset=True)
-
+        elif k == 'a':
+            if self.story_list_ptr > 0:
+                self.story_list_ptr -= 1
+                self.set_left_content(reset=True)
+        elif k == 'd':
+            if self.story_list_ptr < len(self.story_lists)-1:
+                self.story_list_ptr += 1
+                self.set_left_content(reset=True)
 
 VIEWS = {
     "Remove Organization User": RemoveOrgUser,
