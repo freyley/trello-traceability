@@ -40,6 +40,7 @@ class Connect(object):
             [urwid.AttrMap(w, None, 'reveal focus') for w in self.right_items])
         self.left_listbox = urwid.ListBox(self.left_content)
         self.right_listbox = urwid.ListBox(self.right_content)
+        self.left_listbox.set_focus(2)
 
         self.columns = NoRefocusColumns([self.left_listbox, self.right_listbox], focus_column=0)
 
@@ -49,10 +50,12 @@ class Connect(object):
         if reset:
             while self.left_content:
                 self.left_content.pop()
-            self.left_content += self.left_items
+            self.left_content += [ urwid.AttrMap(w, None, 'reveal focus') for w in self.left_items]
+            self.left_listbox.set_focus(2)
+
     def set_right_content(self, reset=False):
         self.right_items = [urwid.Text(self.epic_list.name), urwid.Text('-=-=-=-=-=-=-=-=-=-')]
-        self.right_items += [urwid.Text(epic.name) for epic in self.get_epics()]
+        self.right_items += [urwid.Text("{}] {}".format(i, epic.name)) for i, epic in enumerate(self.get_epics())]
         if reset:
             while self.right_content:
                 self.right_content.pop()
@@ -107,6 +110,19 @@ class Connect(object):
             if self.story_list_ptr < len(self.story_lists)-1:
                 self.story_list_ptr += 1
                 self.set_left_content(reset=True)
+
+        if k == 'up':
+            focus_widget, idx = self.left_listbox.get_focus()
+            if idx > 2:
+                idx = idx - 1
+                self.left_listbox.set_focus(idx)
+
+        elif k == 'down':
+            focus_widget, idx = self.left_listbox.get_focus()
+            if idx < len(self.left_content) - 1:
+                idx = idx + 1
+                self.left_listbox.set_focus(idx)
+
 
 VIEWS = {
     "Remove Organization User": RemoveOrgUser,
