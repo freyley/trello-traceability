@@ -106,12 +106,21 @@ class Connect(object):
                 self.mid_cmd = False
                 self.left_listbox.set_focus(self.old_focus)
                 self.frame.set_focus(0)
+            if k == 'enter':
+                self.mid_cmd = False
+                self.left_listbox.set_focus(self.old_focus)
+                self.frame.set_focus(0)
+                output = self.command_area.get_edit_text()
+                self.command_area.set_edit_text("")
+                # TODO: handle output
+            else:
+                self.command_area.keypress([0], k)
             return
         if k in ('u', 'U'):
             self.parent.set_view(Top)
         if k == 'c':
             self.frame.set_focus(1)
-            self.edit_area_listbox.set_focus(0)
+            self.command_area.set_edit_pos(0)
             self.mid_cmd = True
             self.old_focus = self.left_listbox.get_focus()[1]
         # navigation
