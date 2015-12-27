@@ -28,8 +28,14 @@ class NoRefocusColumns(urwid.Columns):
     def keypress(self, size, key):
         return key
 
+class NoRefocusPile(urwid.Pile):
+    def keypress(self, size, key):
+        return key
+
+
 class Connect(object):
     def __init__(self, parent):
+        self.mid_cmd = self.old_focus = None
         self.parent = parent
         self.get_trello_lists()
         self.set_left_content()
@@ -43,6 +49,9 @@ class Connect(object):
         self.left_listbox.set_focus(2)
 
         self.columns = NoRefocusColumns([self.left_listbox, self.right_listbox], focus_column=0)
+        self.command_area = urwid.Edit(caption="")
+        self.edit_area_listbox = urwid.ListBox([urwid.AttrMap(self.command_area, "notfocus", "focus")])
+        self.frame = NoRefocusPile([self.columns, self.edit_area_listbox], focus_item=0)
 
     def set_left_content(self, reset=False):
         self.left_items = [urwid.Text(self.story_list.name), urwid.Text('-=-=-=-=-=-=-=-=-=-')]
@@ -63,7 +72,7 @@ class Connect(object):
 
     @property
     def widget(self):
-        return urwid.AttrWrap(self.columns, 'body')
+        return urwid.AttrWrap(self.frame, 'body')
 
     @property
     def trello(self):
@@ -92,8 +101,20 @@ class Connect(object):
         return self.epics
 
     def handle_input(self, k):
+        if self.mid_cmd:
+            if k == 'esc':
+                self.mid_cmd = False
+                self.left_listbox.set_focus(self.old_focus)
+                self.frame.set_focus(0)
+            return
         if k in ('u', 'U'):
             self.parent.set_view(Top)
+        if k == 'c':
+            self.frame.set_focus(1)
+            self.edit_area_listbox.set_focus(0)
+            self.mid_cmd = True
+            self.old_focus = self.left_listbox.get_focus()[1]
+        # navigation
         elif k == 'j':
             if self.epic_list_ptr > 0:
                 self.epic_list_ptr -= 1
@@ -110,8 +131,7 @@ class Connect(object):
             if self.story_list_ptr < len(self.story_lists)-1:
                 self.story_list_ptr += 1
                 self.set_left_content(reset=True)
-
-        if k == 'up':
+        elif k == 'up':
             focus_widget, idx = self.left_listbox.get_focus()
             if idx > 2:
                 idx = idx - 1
@@ -134,9 +154,12 @@ class Top(object):
         self.commands = [urwid.Text(text) for text in VIEWS.keys() ]
 
         self.main_content = urwid.SimpleListWalker(
+            [urwid.Text('Commands'),
+             urwid.Text('-=-=-=-=-=-=-=-=-=-')]+
             [urwid.AttrMap(w, None, 'reveal focus') for w in self.commands])
 
         self.listbox = urwid.ListBox(self.main_content)
+        self.listbox.set_focus(2)
         self.parent = parent
 
     @property
@@ -158,7 +181,7 @@ class Top(object):
     def handle_input(self, k):
         if k == 'up':
             focus_widget, idx = self.listbox.get_focus()
-            if idx > 0:
+            if idx > 2:
                 idx = idx - 1
                 self.listbox.set_focus(idx)
 
