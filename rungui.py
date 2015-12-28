@@ -32,6 +32,81 @@ class NoRefocusPile(urwid.Pile):
     def keypress(self, size, key):
         return key
 
+class TrelloCard(object):
+    def __init__(self, card, trello):
+        self.card = card
+        self.trello = trello
+        self.initialize()
+
+    def initialize(self):
+        raise NotImplementedError()
+
+    @property
+    def url(self):
+        return self.card.url
+    @property
+    def id(self):
+        return self.card.id
+    @property
+    def name(self):
+        return self.card.name
+
+
+class Story(TrelloCard):
+    def initialize(self):
+        self.epic_id = None
+        self.meta_checklist = None
+        # gotta populate those checklists
+        self.card.fetch(eager=True)
+        if self.card.checklists:
+            for checklist in self.card.checklists:
+                if checklist.name == 'Meta':
+                    if self.meta_checklist:
+                        # there can be only one Meta checkist
+                        checklist.delete()
+                    else:
+                        self.meta_checklist = checklist
+        if not self.meta_checklist:
+            self.meta_checklist = self.card.add_checklist('Meta', [])
+        for item in self.meta_checklist.items:
+            if item['name'].startswith('Epic Connection:'):
+                self.epic_id = item['name'].split(':')[1].strip()
+                self.connection = item
+
+    def connect_to(self, epic):
+        if self.epic_id:
+            import ipdb; ipdb.set_trace()
+        self.meta_checklist.add_checklist_item("Epic Connection: {}: {}".format(epic.card.id,epic.url))
+        epic.story_checklist.add_checklist_item("{}: {}".format(self.card.id, self.url))
+
+    @property
+    def connected_to(self):
+        if self.epic_id is None:
+            return "No connection"
+        else:
+            epic = self.trello.get_card(epic_id)
+            print "Connected to {}".format(epic.name)
+
+class Epic(TrelloCard):
+    def initialize(self):
+        # gotta populate those checklists
+        self.card.fetch(eager=True)
+        self.story_checklist = None
+        self.stories = {}
+        if self.card.checklists:
+            for checklist in self.card.checklists:
+                if checklist.name == 'Stories':
+                    if self.story_checklist:
+                        # there can be only one Stories checkist
+                        checklist.delete()
+                    else:
+                        self.story_checklist = checklist
+        if not self.story_checklist:
+            self.story_checklist = self.card.add_checklist('Stories', [])
+        for item in self.story_checklist.items:
+            story_id = item['name'].split(':')[0].strip()
+            self.stories[story_id] = item
+
 
 class Connect(object):
     def __init__(self, parent):
@@ -93,12 +168,16 @@ class Connect(object):
         return self.epic_lists[self.epic_list_ptr]
 
     def get_stories(self):
-        self.stories = self.story_list.list_cards()
+        self.stories = [ Story(card, self.trello) for card in self.story_list.list_cards()]
         return self.stories
 
     def get_epics(self):
-        self.epics = self.epic_list.list_cards()
+        self.epics = [ Epic(card, self.trello) for card in self.epic_list.list_cards()]
         return self.epics
+
+    @property
+    def story(self):
+        return self.stories[self.left_listbox.get_focus()[1] - 2]
 
     def handle_input(self, k):
         if self.mid_cmd:
@@ -110,9 +189,9 @@ class Connect(object):
                 self.mid_cmd = False
                 self.left_listbox.set_focus(self.old_focus)
                 self.frame.set_focus(0)
-                output = self.command_area.get_edit_text()
+                output = int(self.command_area.get_edit_text())
                 self.command_area.set_edit_text("")
-                # TODO: handle output
+                self.story.connect_to(self.epics[output])
             else:
                 self.command_area.keypress([0], k)
             return
