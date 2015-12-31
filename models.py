@@ -15,6 +15,11 @@ class AddObjectBase(object):
         foo = session.query(cls).filter_by(**kwargs).first()
         return foo
 
+class User(Base, AddObjectBase):
+    __tablename__ = 'user'
+    id = Column(String, primary_key=True)
+    username = Column(String(convert_unicode=True))
+
 
 class Board(Base, AddObjectBase):
     __tablename__ = 'board'

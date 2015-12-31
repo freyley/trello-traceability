@@ -1,7 +1,10 @@
 #!/usr/bin/env python
+from time import sleep
+
 import trollius
 import datetime
-from models import get_session, Board, TrelloList, Checklist, Card
+from models import get_session, Board, TrelloList, Checklist, Card, User
+
 
 class TrelloInterface(object):
     def __init__(self, trello, organization, settings):
@@ -26,11 +29,10 @@ class TrelloInterface(object):
 
     def _get_epics_and_stories(self):
 
-        def _get_checklist_future(trellocard):
+        def ensure_checklist(trellocard):
             meta_checklist = None
             db_card = Card.create(self.db_session, id=trellocard.id, name=trellocard.name, trellolist_id=trellocard.list_id)
             # gotta populate those checklists
-            trellocard.fetch(eager=True)
             list_name = None
             if db_card.trellolist.board.story_board:
                 list_name = 'Meta'
@@ -50,13 +52,20 @@ class TrelloInterface(object):
                 for item in meta_checklist.items:
                     if item['name'].startswith('Epic Connection:'):
                         db_card.connected_to_id = item['name'].split(':')[1].strip()
-            db_card.save()
+        self.running_prefetches = 0
+
+        def _prefetch_checklists(card):
+            if self.running_prefetches > 3:
+                sleep(8)
+            self.running_prefetches += 1
+            card.fetch(eager=True)
+            self.running_prefetches -= 1
 
         def _make_checklist_futures(cards):
             loop = trollius.get_event_loop()
             futures = []
             for card in cards:
-                futures.append(loop.run_in_executor(None, _get_checklist_future, card))
+                futures.append(loop.run_in_executor(None, _prefetch_checklists, card))
             return futures
 
         def _make_trello_list(lst):
@@ -75,18 +84,46 @@ class TrelloInterface(object):
         @trollius.coroutine
         def make_cards():
             futures = _make_cards()
+            all_cards = []
             for future in futures:
                 cards = yield trollius.From(future)
+                all_cards += cards
                 new_futures = _make_checklist_futures(cards)
                 for future in new_futures:
                     yield trollius.From(future)
+            raise trollius.Return(all_cards)
 
         now = datetime.datetime.now()
         loop = trollius.get_event_loop()
-        loop.run_until_complete(make_cards())
+        all_cards = loop.run_until_complete(make_cards())
+        for card in all_cards:
+            ensure_checklist(card)
         self.db_session.commit()
-        print "time elapsed: {}".format(datetime.datetime.now() - now)
+        print "time elapsed getting cards: {}".format(datetime.datetime.now() - now)
 
+    def get_members(self):
+        self.db_session = get_session()()
+        for member in self.organization.get_members():
+            db_user = self.db_session.query(User).filter_by(id=member.id).first()
+            if db_user is None:
+                db_user = User.create(self.db_session, id=member.id, username=member.username)
+        self.db_session.commit()
+
+    def clean_board_users(self):
+        self.db_session = get_session()()
+        for board in self.organization.get_boards('open'):
+            db_board = self.db_session.query(Board).filter_by(id=board.id).first()
+            if db_board is None:
+                Board.create(self.db_session, id=board.id, name=board.name.replace('\xe2\x80\x99s', ''))
+        self.db_session.commit()
+        self.db_session = get_session()()
+        for board in self.organization.get_boards('open'):
+            for member in board.get_members():
+                db_user = self.db_session.query(User).filter_by(id=member.id).first()
+                if db_user is None:
+                    print("{} is on {}".format(member.full_name, board.name))
+                    # TODO: remove the member automatically
+        self.db_session.commit()
 
 if __name__ == '__main__':
     import settings
@@ -98,4 +135,6 @@ if __name__ == '__main__':
     )
     organization = trelloclient.get_organization(settings.TRELLO_ORGANIZATION_ID)
     ti = TrelloInterface(trelloclient, organization, settings)
-    ti.reset()
+    #ti.reset()
+    ti.get_members()
+    ti.clean_board_users()

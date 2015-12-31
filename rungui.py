@@ -3,7 +3,9 @@
 import urwid
 from trello import TrelloClient
 
+import models
 import settings
+from models import Board, get_session, TrelloList
 
 
 class RemoveOrgUser(object):
@@ -42,8 +44,12 @@ class TrelloCard(object):
         raise NotImplementedError()
 
     @property
+    def trellocard(self):
+        return self.trello.get_card(self.card.id)
+
+    @property
     def url(self):
-        return self.card.url
+        return self.trellocard.url
     @property
     def id(self):
         return self.card.id
@@ -54,30 +60,15 @@ class TrelloCard(object):
 
 class Story(TrelloCard):
     def initialize(self):
-        self.epic_id = None
-        self.meta_checklist = None
-        # gotta populate those checklists
-        self.card.fetch(eager=True)
-        if self.card.checklists:
-            for checklist in self.card.checklists:
-                if checklist.name == 'Meta':
-                    if self.meta_checklist:
-                        # there can be only one Meta checkist
-                        checklist.delete()
-                    else:
-                        self.meta_checklist = checklist
-        if not self.meta_checklist:
-            self.meta_checklist = self.card.add_checklist('Meta', [])
-        for item in self.meta_checklist.items:
-            if item['name'].startswith('Epic Connection:'):
-                self.epic_id = item['name'].split(':')[1].strip()
-                self.connection = item
+        pass
+
+    @property
+    def meta_checklist(self):
+        import ipdb; ipdb.set_trace()
 
     def connect_to(self, epic):
-        if self.epic_id:
-            import ipdb; ipdb.set_trace()
-        self.meta_checklist.add_checklist_item("Epic Connection: {}: {}".format(epic.card.id,epic.url))
-        epic.story_checklist.add_checklist_item("{}: {}".format(self.card.id, self.url))
+        self.meta_checklist.add_checklist_item("Epic Connection: {}: {}".format(epic.id, epic.url))
+        epic.story_checklist.add_checklist_item("{}: {}".format(self.id, self.url))
 
     @property
     def connected_to(self):
@@ -89,27 +80,15 @@ class Story(TrelloCard):
 
 class Epic(TrelloCard):
     def initialize(self):
-        # gotta populate those checklists
-        self.card.fetch(eager=True)
-        self.story_checklist = None
-        self.stories = {}
-        if self.card.checklists:
-            for checklist in self.card.checklists:
-                if checklist.name == 'Stories':
-                    if self.story_checklist:
-                        # there can be only one Stories checkist
-                        checklist.delete()
-                    else:
-                        self.story_checklist = checklist
-        if not self.story_checklist:
-            self.story_checklist = self.card.add_checklist('Stories', [])
-        for item in self.story_checklist.items:
-            story_id = item['name'].split(':')[0].strip()
-            self.stories[story_id] = item
+        pass
 
+    @property
+    def story_checklist(self):
+        import ipdb; ipdb.set_trace()
 
 class Connect(object):
     def __init__(self, parent):
+        self.db_session = get_session()()
         self.mid_cmd = self.old_focus = None
         self.parent = parent
         self.get_trello_lists()
@@ -154,10 +133,10 @@ class Connect(object):
         return self.parent.trelloclient
 
     def get_trello_lists(self):
-        self.story_board = self.trello.get_board(settings.CURRENT_TASK_BOARD)
-        self.story_lists = self.story_board.get_lists('open')
-        self.epic_board = self.trello.get_board(settings.CURRENT_EPIC_BOARD)
-        self.epic_lists = self.epic_board.get_lists('open')
+        self.story_board = self.db_session.query(Board).filter_by(story_board=True).first()
+        self.epic_board = self.db_session.query(Board).filter_by(epic_board=True).first()
+        self.story_lists = self.db_session.query(TrelloList).filter_by(board=self.epic_board)
+        self.epic_lists = self.db_session.query(TrelloList).filter_by(board=self.story_board)
         self.epic_list_ptr = self.story_list_ptr = 0
 
     @property
@@ -168,11 +147,13 @@ class Connect(object):
         return self.epic_lists[self.epic_list_ptr]
 
     def get_stories(self):
-        self.stories = [ Story(card, self.trello) for card in self.story_list.list_cards()]
+        cards = self.db_session.query(models.Card).filter_by(trellolist=self.story_list)
+        self.stories = [ Story(card, self.trello) for card in cards]
         return self.stories
 
     def get_epics(self):
-        self.epics = [ Epic(card, self.trello) for card in self.epic_list.list_cards()]
+        cards = self.db_session.query(models.Card).filter_by(trellolist=self.epic_list)
+        self.epics = [ Epic(card, self.trello) for card in cards ]
         return self.epics
 
     @property
@@ -208,7 +189,7 @@ class Connect(object):
                 self.epic_list_ptr -= 1
                 self.set_right_content(reset=True)
         elif k == 'l':
-            if self.epic_list_ptr < len(self.epic_lists)-1:
+            if self.epic_list_ptr < self.epic_lists.count()-1:
                 self.epic_list_ptr += 1
                 self.set_right_content(reset=True)
         elif k == 'a':
@@ -216,7 +197,7 @@ class Connect(object):
                 self.story_list_ptr -= 1
                 self.set_left_content(reset=True)
         elif k == 'd':
-            if self.story_list_ptr < len(self.story_lists)-1:
+            if self.story_list_ptr < self.story_lists.count()-1:
                 self.story_list_ptr += 1
                 self.set_left_content(reset=True)
         elif k == 'up':
