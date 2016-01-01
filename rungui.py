@@ -103,7 +103,7 @@ class Connect(object):
         self.left_listbox.set_focus(2)
 
         self.columns = NoRefocusColumns([self.left_listbox, self.right_listbox], focus_column=0)
-        self.more_info_area = urwid.Text("")
+        self.more_info_area = urwid.Text(self.story.connected_to)
         self.command_area = urwid.Edit(caption="")
         self.edit_area_listbox = urwid.ListBox([urwid.Text("-=-=-=-=-=-=-=-"), self.more_info_area, self.command_area])
             #urwid.AttrMap(self.command_area, "notfocus", "focus")])
@@ -118,6 +118,8 @@ class Connect(object):
             self.left_content += [ urwid.AttrMap(w, None, 'reveal focus') for w in self.left_items]
             if len(self.left_items):
                 self.left_listbox.set_focus(2)
+                self.more_info_area.set_text(self.story.connected_to)
+
 
     def set_right_content(self, reset=False):
         self.right_items = [urwid.Text(self.epic_list.name), urwid.Text('-=-=-=-=-=-=-=-=-=-')]
