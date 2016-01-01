@@ -71,7 +71,7 @@ class Story(TrelloCard):
         epic.story_checklist.add_checklist_item("{}: {}".format(self.id, self.url))
 
     @property
-    def connected_to(self):
+    def more_info_area(self):
         if self.card.connected_to is None:
             return "No connection"
         else:
@@ -86,48 +86,95 @@ class Epic(TrelloCard):
     def story_checklist(self):
         import ipdb; ipdb.set_trace()
 
+    @property
+    def more_info_area(self):
+        return ""
+
+class Panel(object):
+    def __init__(self, parent, board, card_cls):
+        self.db_session = parent.db_session
+        self.trello = parent.trello
+        self.parent = parent
+        self.board = board
+        self.card_list_ptr = 0
+        self.card_lists = self.db_session.query(TrelloList).filter_by(board=self.board)
+        self.card_cls = card_cls
+        self.content = urwid.SimpleListWalker(
+            [urwid.AttrMap(w, None, 'reveal focus') for w in self.items])
+        self.listbox = urwid.ListBox(self.content)
+
+    def reset_content(self):
+        while self.content:
+            self.content.pop()
+        self.content += [ urwid.AttrMap(w, None, 'reveal focus') for w in self.items]
+        if len(self.items) >2:
+            self.listbox.set_focus(2)
+            # TODO: this doesn't belong here exactly.
+            self.parent.more_info_area.set_text(self.card.more_info_area)
+
+    @property
+    def items(self):
+        items = [urwid.Text(self.card_list.name), urwid.Text('-=-=-=-=-=-=-=-=-=-')]
+        items += [urwid.Text(story.name) for story in self.get_cards()]
+        return items
+
+    @property
+    def card_list(self):
+        return self.card_lists[self.card_list_ptr]
+
+    def get_cards(self):
+        db_cards = self.db_session.query(models.Card).filter_by(trellolist=self.card_list)
+        self.cards = [ self.card_cls(card, self.trello) for card in db_cards]
+        return self.cards
+
+    def set_focus(self, idx):
+        self.listbox.set_focus(idx)
+
+    @property
+    def card(self):
+        return self.cards[self.listbox.get_focus()[1] - 2]
+
+    def go_left(self):
+        if self.card_list_ptr > 0:
+            self.card_list_ptr -= 1
+            self.reset_content()
+
+    def go_right(self):
+        if self.card_list_ptr < self.card_lists.count() - 1:
+            self.card_list_ptr += 1
+            self.reset_content()
+
+    def move_up(self):
+        focus_widget, idx = self.listbox.get_focus()
+        if idx > 2:
+            idx = idx - 1
+            self.listbox.set_focus(idx)
+            self.parent.more_info_area.set_text(self.card.more_info_area)
+    def move_down(self):
+        focus_widget, idx = self.listbox.get_focus()
+        if idx < len(self.content) - 1:
+            idx = idx + 1
+            self.listbox.set_focus(idx)
+            self.parent.more_info_area.set_text(self.card.more_info_area)
+
+
 class Connect(object):
     def __init__(self, parent):
         self.db_session = get_session()()
         self.mid_cmd = self.old_focus = None
         self.parent = parent
-        self.get_trello_lists()
-        self.set_left_content()
-        self.set_right_content()
-        self.left_content = urwid.SimpleListWalker(
-            [urwid.AttrMap(w, None, 'reveal focus') for w in self.left_items])
-        self.right_content = urwid.SimpleListWalker(
-            [urwid.AttrMap(w, None, 'reveal focus') for w in self.right_items])
-        self.left_listbox = urwid.ListBox(self.left_content)
-        self.right_listbox = urwid.ListBox(self.right_content)
-        self.left_listbox.set_focus(2)
+        self.story_board = self.db_session.query(Board).filter_by(story_board=True).first()
+        self.epic_board = self.db_session.query(Board).filter_by(epic_board=True).first()
+        self.left_panel = Panel(self, board=self.story_board, card_cls=Story)
+        self.right_panel = Panel(self, board=self.epic_board, card_cls=Epic)
+        self.left_panel.set_focus(2)
 
-        self.columns = NoRefocusColumns([self.left_listbox, self.right_listbox], focus_column=0)
-        self.more_info_area = urwid.Text(self.story.connected_to)
+        self.columns = NoRefocusColumns([self.left_panel.listbox, self.right_panel.listbox], focus_column=0)
+        self.more_info_area = urwid.Text(self.left_panel.card.more_info_area)
         self.command_area = urwid.Edit(caption="")
         self.edit_area_listbox = urwid.ListBox([urwid.Text("-=-=-=-=-=-=-=-"), self.more_info_area, self.command_area])
             #urwid.AttrMap(self.command_area, "notfocus", "focus")])
         self.frame = NoRefocusPile([self.columns, self.edit_area_listbox], focus_item=0)
-
-    def set_left_content(self, reset=False):
-        self.left_items = [urwid.Text(self.story_list.name), urwid.Text('-=-=-=-=-=-=-=-=-=-')]
-        self.left_items += [urwid.Text(story.name) for story in self.get_stories()]
-        if reset:
-            while self.left_content:
-                self.left_content.pop()
-            self.left_content += [ urwid.AttrMap(w, None, 'reveal focus') for w in self.left_items]
-            if len(self.left_items):
-                self.left_listbox.set_focus(2)
-                self.more_info_area.set_text(self.story.connected_to)
-
-
-    def set_right_content(self, reset=False):
-        self.right_items = [urwid.Text(self.epic_list.name), urwid.Text('-=-=-=-=-=-=-=-=-=-')]
-        self.right_items += [urwid.Text("{}] {}".format(i, epic.name)) for i, epic in enumerate(self.get_epics())]
-        if reset:
-            while self.right_content:
-                self.right_content.pop()
-            self.right_content += self.right_items
 
     @property
     def widget(self):
@@ -137,47 +184,19 @@ class Connect(object):
     def trello(self):
         return self.parent.trelloclient
 
-    def get_trello_lists(self):
-        self.story_board = self.db_session.query(Board).filter_by(story_board=True).first()
-        self.epic_board = self.db_session.query(Board).filter_by(epic_board=True).first()
-        self.story_lists = self.db_session.query(TrelloList).filter_by(board=self.story_board)
-        self.epic_lists = self.db_session.query(TrelloList).filter_by(board=self.epic_board)
-        self.epic_list_ptr = self.story_list_ptr = 0
-
-    @property
-    def story_list(self):
-        return self.story_lists[self.story_list_ptr]
-    @property
-    def epic_list(self):
-        return self.epic_lists[self.epic_list_ptr]
-
-    def get_stories(self):
-        cards = self.db_session.query(models.Card).filter_by(trellolist=self.story_list)
-        self.stories = [ Story(card, self.trello) for card in cards]
-        return self.stories
-
-    def get_epics(self):
-        cards = self.db_session.query(models.Card).filter_by(trellolist=self.epic_list)
-        self.epics = [ Epic(card, self.trello) for card in cards ]
-        return self.epics
-
-    @property
-    def story(self):
-        return self.stories[self.left_listbox.get_focus()[1] - 2]
-
     def handle_input(self, k):
         if self.mid_cmd:
             if k == 'esc':
                 self.mid_cmd = False
-                self.left_listbox.set_focus(self.old_focus)
+                self.left_panel.listbox.set_focus(self.old_focus)
                 self.frame.set_focus(0)
             if k == 'enter':
                 self.mid_cmd = False
-                self.left_listbox.set_focus(self.old_focus)
+                self.left_panel.listbox.set_focus(self.old_focus)
                 self.frame.set_focus(0)
                 output = int(self.command_area.get_edit_text())
                 self.command_area.set_edit_text("")
-                self.story.connect_to(self.epics[output])
+                self.left_panel.card.connect_to(self.right_panel.cards[output])
             else:
                 self.command_area.keypress([0], k)
             return
@@ -187,38 +206,20 @@ class Connect(object):
             self.frame.set_focus(1)
             self.command_area.set_edit_pos(0)
             self.mid_cmd = True
-            self.old_focus = self.left_listbox.get_focus()[1]
+            self.old_focus = self.left_panel.listbox.get_focus()[1]
         # navigation
         elif k == 'j':
-            if self.epic_list_ptr > 0:
-                self.epic_list_ptr -= 1
-                self.set_right_content(reset=True)
+            self.right_panel.go_left()
         elif k == 'l':
-            if self.epic_list_ptr < self.epic_lists.count()-1:
-                self.epic_list_ptr += 1
-                self.set_right_content(reset=True)
+            self.right_panel.go_right()
         elif k == 'a':
-            if self.story_list_ptr > 0:
-                self.story_list_ptr -= 1
-                self.set_left_content(reset=True)
+            self.left_panel.go_left()
         elif k == 'd':
-            if self.story_list_ptr < self.story_lists.count()-1:
-                self.story_list_ptr += 1
-                self.set_left_content(reset=True)
+            self.left_panel.go_right()
         elif k == 'up':
-            focus_widget, idx = self.left_listbox.get_focus()
-            if idx > 2:
-                idx = idx - 1
-                self.left_listbox.set_focus(idx)
-                self.more_info_area.set_text(self.story.connected_to)
-
+            self.left_panel.move_up()
         elif k == 'down':
-            focus_widget, idx = self.left_listbox.get_focus()
-            if idx < len(self.left_content) - 1:
-                idx = idx + 1
-                self.left_listbox.set_focus(idx)
-                self.more_info_area.set_text(self.story.connected_to)
-
+            self.left_panel.move_down()
 
 VIEWS = {
     "Remove Organization User": RemoveOrgUser,
