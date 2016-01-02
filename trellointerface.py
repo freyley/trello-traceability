@@ -5,6 +5,33 @@ import trollius
 import datetime
 from models import get_session, Board, TrelloList, Checklist, Card, User
 
+def create_dbcard_and_ensure_checklist(db_session, trellocard, prefetch_checklists=False):
+    if prefetch_checklists:
+        trellocard.fetch(eager=True)
+    meta_checklist = None
+    db_card = Card.create(db_session, id=trellocard.id, name=trellocard.name, trellolist_id=trellocard.list_id)
+    # gotta populate those checklists
+    list_name = None
+    if db_card.trellolist.board.story_board:
+        list_name = 'Meta'
+    elif db_card.trellolist.board.epic_board:
+        list_name = 'Stories'
+    else:
+        raise Exception("Board must be epic or stories")
+
+    if trellocard.checklists:
+        for checklist in trellocard.checklists:
+            if checklist.name == list_name:
+                meta_checklist = checklist
+    if not meta_checklist:
+        meta_checklist = trellocard.add_checklist(list_name, [])
+    db_card.magic_checklist_id = meta_checklist.id
+    if db_card.trellolist.board.story_board:
+        for item in meta_checklist.items:
+            if item['name'].startswith('Epic Connection:'):
+                db_card.connected_to_id = item['name'].split(':')[1].strip()
+    return db_card
+
 
 class TrelloInterface(object):
     def __init__(self, trello, organization, settings):
@@ -29,29 +56,8 @@ class TrelloInterface(object):
 
     def _get_epics_and_stories(self):
 
-        def ensure_checklist(trellocard):
-            meta_checklist = None
-            db_card = Card.create(self.db_session, id=trellocard.id, name=trellocard.name, trellolist_id=trellocard.list_id)
-            # gotta populate those checklists
-            list_name = None
-            if db_card.trellolist.board.story_board:
-                list_name = 'Meta'
-            elif db_card.trellolist.board.epic_board:
-                list_name = 'Stories'
-            else:
-                raise Exception("Board must be epic or stories")
-
-            if trellocard.checklists:
-                for checklist in trellocard.checklists:
-                    if checklist.name == list_name:
-                        meta_checklist = checklist
-            if not meta_checklist:
-                meta_checklist = trellocard.add_checklist(list_name, [])
-            db_card.magic_checklist_id = meta_checklist.id
-            if db_card.trellolist.board.story_board:
-                for item in meta_checklist.items:
-                    if item['name'].startswith('Epic Connection:'):
-                        db_card.connected_to_id = item['name'].split(':')[1].strip()
+        def _ensure_checklist(trellocard):
+            create_dbcard_and_ensure_checklist(self.db_session, trellocard)
         self.running_prefetches = 0
 
         def _prefetch_checklists(card):
@@ -97,7 +103,7 @@ class TrelloInterface(object):
         loop = trollius.get_event_loop()
         all_cards = loop.run_until_complete(make_cards())
         for card in all_cards:
-            ensure_checklist(card)
+            _ensure_checklist(card)
         self.db_session.commit()
         print "time elapsed getting cards: {}".format(datetime.datetime.now() - now)
 

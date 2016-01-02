@@ -6,6 +6,7 @@ from trello import TrelloClient
 import models
 import settings
 from models import Board, get_session, TrelloList
+from trellointerface import create_dbcard_and_ensure_checklist
 
 
 class RemoveOrgUser(object):
@@ -67,6 +68,7 @@ class Story(TrelloCard):
         import ipdb; ipdb.set_trace()
 
     def connect_to(self, epic):
+        return
         self.meta_checklist.add_checklist_item("Epic Connection: {}: {}".format(epic.id, epic.url))
         epic.story_checklist.add_checklist_item("{}: {}".format(self.id, self.url))
 
@@ -111,6 +113,10 @@ class Panel(object):
             self.listbox.set_focus(2)
             # TODO: this doesn't belong here exactly.
             self.parent.more_info_area.set_text(self.card.more_info_area)
+
+    @property
+    def trelloboard(self):
+        return self.trello.get_board(self.board.id)
 
     @property
     def items(self):
@@ -184,19 +190,38 @@ class Connect(object):
     def trello(self):
         return self.parent.trelloclient
 
+    def _complete(self):
+        self.command_area.set_edit_text("")
+        self.mid_cmd = False
+        self.left_panel.listbox.set_focus(self.old_focus)
+        self.frame.set_focus(0)
+
+    def complete_n(self):
+        output = self.command_area.get_edit_text().strip()
+        card_list = self.right_panel.card_list
+        trello_list = self.right_panel.trelloboard.get_list(card_list.id)
+        card = trello_list.add_card(output)
+        db_card = create_dbcard_and_ensure_checklist(self.db_session, card, prefetch_checklists=True)
+        self.db_session.commit()
+        self.db_session = get_session()()
+        self.left_panel.card.connect_to(Epic(db_card, self.trello))
+        self.right_panel.reset_content()
+        self._complete()
+
+    def complete_c(self):
+        output = int(self.command_area.get_edit_text())
+        self._complete()
+        self.left_panel.card.connect_to(self.right_panel.cards[output])
+
     def handle_input(self, k):
         if self.mid_cmd:
             if k == 'esc':
-                self.mid_cmd = False
-                self.left_panel.listbox.set_focus(self.old_focus)
-                self.frame.set_focus(0)
+                self._complete()
             if k == 'enter':
-                self.mid_cmd = False
-                self.left_panel.listbox.set_focus(self.old_focus)
-                self.frame.set_focus(0)
-                output = int(self.command_area.get_edit_text())
-                self.command_area.set_edit_text("")
-                self.left_panel.card.connect_to(self.right_panel.cards[output])
+                if self.mid_cmd == 'n':
+                    self.complete_n()
+                elif self.mid_cmd == 'c':
+                    self.complete_c()
             else:
                 self.command_area.keypress([0], k)
             return
@@ -205,7 +230,12 @@ class Connect(object):
         if k == 'c':
             self.frame.set_focus(1)
             self.command_area.set_edit_pos(0)
-            self.mid_cmd = True
+            self.mid_cmd = 'c'
+            self.old_focus = self.left_panel.listbox.get_focus()[1]
+        if k == 'n':
+            self.frame.set_focus(1)
+            self.command_area.set_edit_pos(0)
+            self.mid_cmd = 'n'
             self.old_focus = self.left_panel.listbox.get_focus()[1]
         # navigation
         elif k == 'j':
