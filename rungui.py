@@ -65,12 +65,14 @@ class Story(TrelloCard):
 
     @property
     def meta_checklist(self):
-        import ipdb; ipdb.set_trace()
+        tc = self.trellocard
+        tc.fetch(eager=True)
+        return [ checklist for checklist in tc.checklists if checklist.id == self.card.magic_checklist_id ][0]
 
     def connect_to(self, epic):
-        return
         self.meta_checklist.add_checklist_item("Epic Connection: {}: {}".format(epic.id, epic.url))
         epic.story_checklist.add_checklist_item("{}: {}".format(self.id, self.url))
+        self.card.connected_to_id = epic.id
 
     @property
     def more_info_area(self):
@@ -81,12 +83,15 @@ class Story(TrelloCard):
             return "Connected to {}".format(epic.name)
 
 class Epic(TrelloCard):
+
     def initialize(self):
         pass
 
     @property
     def story_checklist(self):
-        import ipdb; ipdb.set_trace()
+        tc = self.trellocard
+        tc.fetch(eager=True)
+        return [ checklist for checklist in tc.checklists if checklist.id == self.card.magic_checklist_id ][0]
 
     @property
     def more_info_area(self):
@@ -121,7 +126,7 @@ class Panel(object):
     @property
     def items(self):
         items = [urwid.Text(self.card_list.name), urwid.Text('-=-=-=-=-=-=-=-=-=-')]
-        items += [urwid.Text(story.name) for story in self.get_cards()]
+        items += [urwid.Text("{}] {}".format(i, card.name)) for i, card in enumerate(self.get_cards())]
         return items
 
     @property
@@ -212,6 +217,8 @@ class Connect(object):
         output = int(self.command_area.get_edit_text())
         self._complete()
         self.left_panel.card.connect_to(self.right_panel.cards[output])
+        self.db_session.commit()
+
 
     def handle_input(self, k):
         if self.mid_cmd:
