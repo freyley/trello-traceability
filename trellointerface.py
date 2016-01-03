@@ -12,7 +12,7 @@ def create_dbcard_and_ensure_checklist(db_session, trellocard, prefetch_checklis
     db_card = Card.create(db_session, id=trellocard.id, name=trellocard.name, trellolist_id=trellocard.list_id)
     # gotta populate those checklists
     list_name = None
-    if db_card.trellolist.board.story_board:
+    if db_card.trellolist.board.story_board or db_card.trellolist.board.future_story_board:
         list_name = 'Meta'
     elif db_card.trellolist.board.epic_board:
         list_name = 'Stories'
@@ -46,12 +46,15 @@ class TrelloInterface(object):
         self.db_session.query(TrelloList).delete()
         self.db_session.query(Board).delete()
 
-        self._story_board = self.trello.get_board(self.settings.CURRENT_TASK_BOARD)
+        self._story_board = self.trello.get_board(self.settings.CURRENT_STORY_BOARD)
         self._epic_board = self.trello.get_board(self.settings.CURRENT_EPIC_BOARD)
+        self._future_story_board = self.trello.get_board(self.settings.FUTURE_STORY_BOARD)
         self.db_session.add(Board(id=self._story_board.id, name=self._story_board.name, story_board=True))
         self.db_session.add(Board(id=self._epic_board.id, name=self._epic_board.name, epic_board=True))
+        self.db_session.add(Board(id=self._future_story_board.id, name=self._future_story_board.name, future_story_board=True))
         self._story_lists = self._story_board.get_lists('open')
         self._epic_lists = self._epic_board.get_lists('open')
+        self._future_story_lists = self._future_story_board.get_lists('open')
         self._get_epics_and_stories()
 
     def _get_epics_and_stories(self):
@@ -85,6 +88,9 @@ class TrelloInterface(object):
                 futures.append(loop.run_in_executor(None, _make_trello_list, story_list))
             for epic_list in self._epic_lists:
                 futures.append(loop.run_in_executor(None, _make_trello_list, epic_list))
+            for future_story_list in self._future_story_lists:
+                futures.append(loop.run_in_executor(None, _make_trello_list, future_story_list))
+
             return futures
 
         @trollius.coroutine
@@ -141,6 +147,6 @@ if __name__ == '__main__':
     )
     organization = trelloclient.get_organization(settings.TRELLO_ORGANIZATION_ID)
     ti = TrelloInterface(trelloclient, organization, settings)
-    #ti.reset()
+    ti.reset()
     ti.get_members()
     ti.clean_board_users()

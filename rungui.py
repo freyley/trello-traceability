@@ -176,7 +176,9 @@ class Connect(object):
         self.parent = parent
         self.story_board = self.db_session.query(Board).filter_by(story_board=True).first()
         self.epic_board = self.db_session.query(Board).filter_by(epic_board=True).first()
-        self.left_panel = Panel(self, board=self.story_board, card_cls=Story)
+        self.future_story_board = self.db_session.query(Board).filter_by(future_story_board=True).first()
+        self.left_panel = self.current_story_panel = Panel(self, board=self.story_board, card_cls=Story)
+        self.future_story_panel = Panel(self, board=self.future_story_board, card_cls=Story)
         self.right_panel = Panel(self, board=self.epic_board, card_cls=Epic)
         self.left_panel.set_focus(2)
 
@@ -219,6 +221,14 @@ class Connect(object):
         self.left_panel.card.connect_to(self.right_panel.cards[output])
         self.db_session.commit()
 
+    def switch_story_boards(self):
+        if self.left_panel == self.current_story_panel:
+            self.left_panel = self.future_story_panel
+        else:
+            self.left_panel = self.current_story_panel
+        self.columns.widget_list = [self.left_panel.listbox, self.right_panel.listbox]
+        self.columns.set_focus(0)
+        self.left_panel.listbox.set_focus(2)
 
     def handle_input(self, k):
         if self.mid_cmd:
@@ -234,6 +244,8 @@ class Connect(object):
             return
         if k in ('u', 'U'):
             self.parent.set_view(Top)
+        if k == 's':
+            self.switch_story_boards()
         if k == 'c':
             self.frame.set_focus(1)
             self.command_area.set_edit_pos(0)

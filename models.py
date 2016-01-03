@@ -27,6 +27,7 @@ class Board(Base, AddObjectBase):
     name = Column(String)
     epic_board = Column(Boolean, default=False)
     story_board = Column(Boolean, default=False)
+    future_story_board = Column(Boolean, default=False)
 
 class TrelloList(Base, AddObjectBase):
     __tablename__ = 'list'
