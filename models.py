@@ -63,6 +63,3 @@ def get_session():
 def main():
     session = get_session()
     Base.metadata.create_all(session.kw['bind'])
-
-if __name__=='__main__':
-    main()

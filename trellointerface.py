@@ -137,7 +137,7 @@ class TrelloInterface(object):
                     # TODO: remove the member automatically
         self.db_session.commit()
 
-if __name__ == '__main__':
+def main():
     import settings
     from trello import TrelloClient
     trelloclient = TrelloClient(
