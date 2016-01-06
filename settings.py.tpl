@@ -12,3 +12,4 @@ TRELLO_DB_CONNECTION_STRING = 'sqlite:///trello.db'
 # identifiers for calculating cycle time - you can identify starting lists and finishing lists by either id or name
 IDENTIFY_STARTING_LIST = {'id': 'FILLMEIN'}
 IDENTIFY_DONE_LIST = {'name': ['Ready for Release', 'Done']}
+CYCLE_TIMES_CSV_LOCATION = '/bar/bin/bash'

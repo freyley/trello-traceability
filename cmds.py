@@ -116,7 +116,7 @@ def find_cycle_times():
     CYCLE_TIME_IDENTIFIER = 'Cycle time:::'
     FINISHED_IDENTIFIER = 'Finished:::'
     STARTED_IDENTIFIER = 'Started:::'
-
+    cycle_time_file = open(settings.CYCLE_TIMES_CSV_LOCATION, 'a')
     for board_id in [settings.CURRENT_STORY_BOARD, settings.FUTURE_STORY_BOARD]:
         board = trelloclient.get_board(board_id)
 
@@ -153,10 +153,11 @@ def find_cycle_times():
                         if not checklist.found_done:
                             checklist.add_checklist_item('{} {}'.format(FINISHED_IDENTIFIER, action['date']))
                         if checklist.started_time and checklist.finished_time:
-                            cycle_time = (action_date - checklist.started_time).days
+                            cycle_time = (action_date - checklist.started_time).total_seconds() / (60*60)
                             cycle_time_string = '{} {}'.format(CYCLE_TIME_IDENTIFIER, cycle_time)
-                            if not checklist.cycle_time:
+                            if checklist.cycle_time is None:
                                 checklist.add_checklist_item(cycle_time_string)
+                                cycle_time_file.writelines(["{card.name},{card.id},{card.url},{cycle_time}".format(card=card, cycle_time=cycle_time)])
                             print "Found cycle time for {}: {}".format(card.name, cycle_time_string)
 
 
