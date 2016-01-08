@@ -193,6 +193,14 @@ def find_cycle_times():
                                 card=card, cycle_time=cycle_time, engineering_time=engineering_time))
                         print "Found cycle time for {}: {}".format(card.name, cycle_time_string)
 
+def find_unconnected():
+    import settings
+    db_session = models.get_session()()
+    current_board_id = settings.CURRENT_STORY_BOARD
+    unconnected_cards = db_session.query(models.Card, models.TrelloList).filter(models.Card.trellolist_id==models.TrelloList.id).filter(models.Card.connected_to_id == None).filter(
+        models.TrelloList.board_id == current_board_id)
+    for card, tlist in unconnected_cards:
+        print "found disconnected card", card.name
 
 
 cmds = {
@@ -202,6 +210,7 @@ cmds = {
     'find_boards': find_boards,
     'complete': close_complete,
     'cycletimes': find_cycle_times,
+    'unconnected': find_unconnected,
 }
 
 if len(sys.argv) < 2:
