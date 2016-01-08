@@ -176,9 +176,12 @@ class Connect(object):
         self.parent = parent
         self.story_board = self.db_session.query(Board).filter_by(story_board=True).first()
         self.epic_board = self.db_session.query(Board).filter_by(epic_board=True).first()
-        self.future_story_board = self.db_session.query(Board).filter_by(future_story_board=True).first()
-        self.left_panel = self.current_story_panel = Panel(self, board=self.story_board, card_cls=Story)
-        self.future_story_panel = Panel(self, board=self.future_story_board, card_cls=Story)
+        self.future_story_boards = self.db_session.query(Board).filter_by(future_story_board=True)
+        self.panels = [Panel(self, board=self.story_board, card_cls=Story)]
+        self.panels += [ Panel(self, board=fsb, card_cls=Story) for fsb in self.future_story_boards]
+        self.left_panel_idx = 0
+        self.left_panel = self.panels[self.left_panel_idx]
+
         self.right_panel = Panel(self, board=self.epic_board, card_cls=Epic)
         self.left_panel.set_focus(2)
 
@@ -222,10 +225,11 @@ class Connect(object):
         self.db_session.commit()
 
     def switch_story_boards(self):
-        if self.left_panel == self.current_story_panel:
-            self.left_panel = self.future_story_panel
-        else:
-            self.left_panel = self.current_story_panel
+        self.left_panel_idx += 1
+        if self.left_panel_idx == len(self.panels):
+            self.left_panel_idx = 0
+        self.left_panel = self.panels[self.left_panel_idx]
+        
         self.columns.widget_list = [self.left_panel.listbox, self.right_panel.listbox]
         self.columns.set_focus(0)
         self.left_panel.listbox.set_focus(2)

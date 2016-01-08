@@ -48,13 +48,14 @@ class TrelloInterface(object):
 
         self._story_board = self.trello.get_board(self.settings.CURRENT_STORY_BOARD)
         self._epic_board = self.trello.get_board(self.settings.CURRENT_EPIC_BOARD)
-        self._future_story_board = self.trello.get_board(self.settings.FUTURE_STORY_BOARD)
+        self._future_story_boards = [ self.trello.get_board(board_id) for board_id in self.settings.FUTURE_STORY_BOARD ]
         self.db_session.add(Board(id=self._story_board.id, name=self._story_board.name, story_board=True))
         self.db_session.add(Board(id=self._epic_board.id, name=self._epic_board.name, epic_board=True))
-        self.db_session.add(Board(id=self._future_story_board.id, name=self._future_story_board.name, future_story_board=True))
+        for fsb in self._future_story_boards:
+            self.db_session.add(Board(id=fsb.id, name=fsb.name, future_story_board=True))
         self._story_lists = self._story_board.get_lists('open')
         self._epic_lists = self._epic_board.get_lists('open')
-        self._future_story_lists = self._future_story_board.get_lists('open')
+        self._future_story_lists = [ fsb.get_lists('open') for fsb in self._future_story_boards ]
         self._get_epics_and_stories()
 
     def _get_epics_and_stories(self):
@@ -88,8 +89,9 @@ class TrelloInterface(object):
                 futures.append(loop.run_in_executor(None, _make_trello_list, story_list))
             for epic_list in self._epic_lists:
                 futures.append(loop.run_in_executor(None, _make_trello_list, epic_list))
-            for future_story_list in self._future_story_lists:
-                futures.append(loop.run_in_executor(None, _make_trello_list, future_story_list))
+            for future_story_board_lists in self._future_story_lists:
+                for future_story_list in future_story_board_lists:
+                    futures.append(loop.run_in_executor(None, _make_trello_list, future_story_list))
 
             return futures
 
