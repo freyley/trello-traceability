@@ -94,7 +94,7 @@ def close_complete():
         most_recent_date = datetime.now(utc) - timedelta(100)
 
     new_newest_date = most_recent_date
-    for board_id in [settings.CURRENT_STORY_BOARD, settings.FUTURE_STORY_BOARD]:
+    for board_id in [settings.CURRENT_STORY_BOARD] + settings.FUTURE_STORY_BOARD:
         board = trelloclient.get_board(board_id)
         board.fetch_actions('updateCheckItemStateOnCard')
         actions = board.actions
@@ -151,6 +151,8 @@ def find_cycle_times():
                             checklist.found_started = True
                     if not checklist.found_started:
                         checklist.add_checklist_item('{} {}'.format(STARTED_IDENTIFIER, action['date']))
+                        print "Found started time for card {}".format(card.name)
+
         elif _leaving_doing_for_committed(action):
             card = trelloclient.get_card(action['data']['card']['id'])
             card.fetch(eager=True)
@@ -162,13 +164,14 @@ def find_cycle_times():
                             checklist.found_engineering = True
                     if not checklist.found_engineering:
                         checklist.add_checklist_item('{} {}'.format(ENGINEERING_IDENTIFIER, action['date']))
+                        print "Found engineering time for card {}".format(card.name)
         elif _going_to_a_done_list(action):
             card = trelloclient.get_card(action['data']['card']['id'])
             card.fetch(eager=True)
             for checklist in card.checklists:
                 if checklist.name == 'Meta':
                     checklist.found_done = False
-                    checklist.started_time = checklist.finished_time = checklist.cycle_time = None
+                    checklist.started_time = checklist.finished_time = checklist.engineering_time = checklist.cycle_time = None
                     for item in checklist.items:
                         if item['name'].startswith(FINISHED_IDENTIFIER):
                             checklist.found_done = True
@@ -181,6 +184,7 @@ def find_cycle_times():
                             checklist.cycle_time = float(item['name'].split(CYCLE_TIME_IDENTIFIER)[1])
                     if not checklist.found_done:
                         checklist.add_checklist_item('{} {}'.format(FINISHED_IDENTIFIER, action['date']))
+                        print "Found finished time for card {}".format(card.name)
                     if checklist.started_time and checklist.finished_time:
                         engineering_time = ""
                         if checklist.engineering_time:
@@ -191,7 +195,7 @@ def find_cycle_times():
                             checklist.add_checklist_item(cycle_time_string)
                             cycle_time_file.write('"{card.name}",{card.id},"{card.url}",{engineering_time},{cycle_time}\n'.format(
                                 card=card, cycle_time=cycle_time, engineering_time=engineering_time))
-                        print "Found cycle time for {}: {}".format(card.name, cycle_time_string)
+                            print "Found cycle time for {}: {}".format(card.name, cycle_time_string)
 
 def find_unconnected():
     import settings

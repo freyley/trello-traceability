@@ -229,7 +229,7 @@ class Connect(object):
         if self.left_panel_idx == len(self.panels):
             self.left_panel_idx = 0
         self.left_panel = self.panels[self.left_panel_idx]
-        
+
         self.columns.widget_list = [self.left_panel.listbox, self.right_panel.listbox]
         self.columns.set_focus(0)
         self.left_panel.listbox.set_focus(2)
