@@ -206,6 +206,20 @@ def find_unconnected():
     for card, tlist in unconnected_cards:
         print "found disconnected card", card.name
 
+def next_release():
+    import settings
+    from trello import TrelloClient
+    trelloclient = TrelloClient(
+        api_key=settings.TRELLO_API_KEY,
+        api_secret=settings.TRELLO_API_SECRET,
+        token=settings.TRELLO_OAUTH_TOKEN,
+    )
+    board = trelloclient.get_board(settings.CURRENT_STORY_BOARD)
+    for trellolist in board.get_lists('open'):
+        action_list = {'name': trellolist.name }
+        if _identify_list_from_identifiers(action_list, settings.IDENTIFY_DONE_LIST):
+            for card in trellolist.list_cards():
+                print card.name
 
 cmds = {
     'makedb': make_db,
@@ -215,6 +229,7 @@ cmds = {
     'complete': close_complete,
     'cycletimes': find_cycle_times,
     'unconnected': find_unconnected,
+    'next_release': next_release,
 }
 
 if len(sys.argv) < 2:
