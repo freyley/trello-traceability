@@ -86,7 +86,9 @@ def close_complete():
         api_secret=settings.TRELLO_API_SECRET,
         token=settings.TRELLO_OAUTH_TOKEN,
     )
-    MOST_RECENT_DATE_FILENAME = 'most_recent_date'
+    import os.path
+    PROJECT_DIR = os.path.dirname(__file__)
+    MOST_RECENT_DATE_FILENAME = os.path.join(PROJECT_DIR, 'most_recent_date')
     try:
         most_recent_date = pickle.load(open(MOST_RECENT_DATE_FILENAME))
     except IOError:
